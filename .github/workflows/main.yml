@@ -2,7 +2,7 @@ name: Beadando_cicd
 
 on:
   push:
-    branches: [ master ]
+    branches: [ main ]
 
 permissions:
   pages: write
