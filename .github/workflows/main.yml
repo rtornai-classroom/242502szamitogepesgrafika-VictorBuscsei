@@ -56,8 +56,11 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v3
 
-      - name: Bootstrap vcpkg and install deps
-        uses: lukka/get-vcpkg-install@v17
+      - name: Clone and bootstrap vcpkg
+        shell: powershell
+        run: |
+          git clone https://github.com/microsoft/vcpkg.git vcpkg
+          .\vcpkg\bootstrap-vcpkg.bat
 
       - name: Install libraries via vcpkg
         run: |
