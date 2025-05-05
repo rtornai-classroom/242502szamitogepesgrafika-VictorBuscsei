@@ -1,0 +1,105 @@
+name: Beadando_cicd
+
+on:
+  push:
+    branches: [ master ]
+
+permissions:
+  pages: write
+  id-token: write
+
+jobs:
+# Web build steps
+  web:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+
+      - name: Set up Emscripten
+        uses: mymindstorm/setup-emsdk@v14  
+
+      - name: Build WebAssembly
+        run: |
+          for dir in 01_beadando 02_beadando; do
+            emcc $dir/Source.cpp \
+              -O2 \
+              -s LEGACY_GL_EMULATION=1 \
+              -s USE_GLFW=3 \
+              -s FULL_ES3 \
+              -o $dir/index.html
+          done
+        # LEGACY_GL_EMULATION needed for glBegin and glEnd calls in the browser
+
+      - name: Upload pages
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: ./  
+
+  deploy-pages:
+    needs: web
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Deploy to GitHub Pages
+        uses: actions/deploy-pages@v4
+
+# Windows build steps with artifacts
+  native:
+    runs-on: windows-latest
+    strategy:
+      matrix:
+        project: [01_beadando, 02_beadando]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+
+      - name: Bootstrap vcpkg and install deps
+        uses: lukka/get-vcpkg-install@v17
+
+      - name: Install libraries via vcpkg
+        run: |
+          vcpkg/vcpkg install glew:x64-windows glfw3:x64-windows glm:x64-windows
+        shell: bash
+
+      - name: Generate CMakeLists
+        run: |
+          cat > CMakeLists.txt << 'EOF'
+          cmake_minimum_required(VERSION 3.15)
+          project(Beadando_VB)
+          set(CMAKE_TOOLCHAIN_FILE "${CMAKE_SOURCE_DIR}/vcpkg/scripts/buildsystems/vcpkg.cmake")
+          find_package(glfw3 CONFIG REQUIRED)
+          find_package(GLEW REQUIRED)
+          find_package(glm CONFIG REQUIRED)
+          add_executable(${project} ${project}/Source.cpp)
+          target_include_directories(${project} PRIVATE ${project})
+          target_link_libraries(${project} PRIVATE glfw GLEW::GLEW glm opengl32)
+          EOF
+        env:
+          project: ${{ matrix.project }}
+
+      - name: Build CMake
+        shell: bash
+        run: |
+          cmake -S . -B build \
+            -G "Visual Studio 17 2022" -A x64 \
+            -DCMAKE_TOOLCHAIN_FILE=./vcpkg/scripts/buildsystems/vcpkg.cmake \
+            -DCMAKE_BUILD_TYPE=Release
+          cmake --build build --config Release
+        env:
+          project: ${{ matrix.project }}
+
+      - name: Collect and package executables
+        shell: powershell
+        run: |
+          New-Item -ItemType Directory -Force -Path artifact
+          Copy-Item -Path build/Release/${{ matrix.project }}.exe -Destination artifact/
+          Compress-Archive -Path artifact/*.exe -DestinationPath native-exes.zip
+
+      - name: Upload native executables ZIP
+        uses: actions/upload-artifact@v4
+        with:
+          name: native-executables
+          path: native-exes.zip
