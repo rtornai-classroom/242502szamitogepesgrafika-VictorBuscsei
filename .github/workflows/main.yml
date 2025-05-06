@@ -84,7 +84,7 @@ jobs:
           find_package(glm CONFIG REQUIRED)
           add_executable($env:PROJ $env:PROJ/Source.cpp)
           target_include_directories($env:PROJ PRIVATE $env:PROJ)
-          target_link_libraries($env:PROJ PRIVATE glfw GLEW::GLEW glm opengl32)
+          target_link_libraries(${project} PRIVATE glfw GLEW::GLEW glm::glm opengl32)
           "@
           $cm | Set-Content -LiteralPath CMakeLists.txt -Encoding UTF8
 
