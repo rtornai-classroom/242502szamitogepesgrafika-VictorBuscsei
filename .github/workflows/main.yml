@@ -27,7 +27,6 @@ jobs:
               -O2 \
               -s LEGACY_GL_EMULATION=1 \
               -s USE_GLFW=3 \
-              -s FULL_ES3 \
               -o $dir/index.html
           done
         # LEGACY_GL_EMULATION needed for glBegin and glEnd calls in the browser
@@ -57,48 +56,51 @@ jobs:
         uses: actions/checkout@v3
 
       - name: Clone and bootstrap vcpkg
-        shell: powershell
+        shell: pwsh
         run: |
+          # Clone official vcpkg repo
           git clone https://github.com/microsoft/vcpkg.git vcpkg
+          # Bootstrap vcpkg (builds vcpkg.exe)
           .\vcpkg\bootstrap-vcpkg.bat
+          # Install required libraries
+          .\vcpkg\vcpkg.exe install glew:x64-windows glfw3:x64-windows glm:x64-windows
 
-      - name: Install libraries via vcpkg
+      - name: Generate CMakeLists.txt
+        shell: pwsh
+        env:
+          PROJ: ${{ matrix.project }}
         run: |
-          vcpkg/vcpkg install glew:x64-windows glfw3:x64-windows glm:x64-windows
-        shell: bash
-
-      - name: Generate CMakeLists
-        run: |
-          cat > CMakeLists.txt << 'EOF'
+          $cm = @"
           cmake_minimum_required(VERSION 3.15)
-          project(Beadando_VB)
-          set(CMAKE_TOOLCHAIN_FILE "${CMAKE_SOURCE_DIR}/vcpkg/scripts/buildsystems/vcpkg.cmake")
+          project($env:PROJ)
+          set(CMAKE_TOOLCHAIN_FILE "$env:GITHUB_WORKSPACE\vcpkg\scripts\buildsystems\vcpkg.cmake")
           find_package(glfw3 CONFIG REQUIRED)
           find_package(GLEW REQUIRED)
           find_package(glm CONFIG REQUIRED)
-          add_executable(${project} ${project}/Source.cpp)
-          target_include_directories(${project} PRIVATE ${project})
-          target_link_libraries(${project} PRIVATE glfw GLEW::GLEW glm opengl32)
-          EOF
-        env:
-          project: ${{ matrix.project }}
+          add_executable($env:PROJ $env:PROJ/Source.cpp)
+          target_include_directories($env:PROJ PRIVATE $env:PROJ)
+          target_link_libraries($env:PROJ PRIVATE glfw GLEW::GLEW glm opengl32)
+          "@
+          $cm | Set-Content -LiteralPath CMakeLists.txt -Encoding UTF8
 
-      - name: Build CMake
-        shell: bash
+      - name: Configure and build with CMake
+        shell: pwsh
+        env:
+          PROJ: ${{ matrix.project }}
         run: |
-          cmake -S . -B build \
-            -G "Visual Studio 17 2022" -A x64 \
-            -DCMAKE_TOOLCHAIN_FILE=./vcpkg/scripts/buildsystems/vcpkg.cmake \
+          cmake -S . -B build `
+            -G "Visual Studio 17 2022" -A x64 `
+            -DCMAKE_TOOLCHAIN_FILE="$env:GITHUB_WORKSPACE\vcpkg\scripts\buildsystems\vcpkg.cmake" `
             -DCMAKE_BUILD_TYPE=Release
           cmake --build build --config Release
-        env:
-          project: ${{ matrix.project }}
 
-      - name: Collect and package executables
-        shell: powershell
+      - name: Package executables
+        shell: pwsh
+        env:
+          PROJ: ${{ matrix.project }}
         run: |
           New-Item -ItemType Directory -Force -Path artifact
-          Copy-Item -Path build/Release/${{ matrix.project }}.exe -Destination artifact/
+          Copy-Item -Path build/Release/$env:PROJ.exe -Destination artifact/
           Compress-Archive -Path artifact/*.exe -DestinationPath native-exes.zip
 
       - name: Upload native executables ZIP
