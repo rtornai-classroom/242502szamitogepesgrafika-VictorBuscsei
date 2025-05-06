@@ -17,6 +17,11 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v3
 
+      - name: Install GLM headers
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libglm-dev
+
       - name: Set up Emscripten
         uses: mymindstorm/setup-emsdk@v14  
 
@@ -73,7 +78,7 @@ jobs:
           $cm = @"
           cmake_minimum_required(VERSION 3.15)
           project($env:PROJ)
-          set(CMAKE_TOOLCHAIN_FILE "$env:GITHUB_WORKSPACE\vcpkg\scripts\buildsystems\vcpkg.cmake")
+          set(CMAKE_TOOLCHAIN_FILE "${CMAKE_SOURCE_DIR}/vcpkg/scripts/buildsystems/vcpkg.cmake")
           find_package(glfw3 CONFIG REQUIRED)
           find_package(GLEW REQUIRED)
           find_package(glm CONFIG REQUIRED)
@@ -90,7 +95,7 @@ jobs:
         run: |
           cmake -S . -B build `
             -G "Visual Studio 17 2022" -A x64 `
-            -DCMAKE_TOOLCHAIN_FILE="$env:GITHUB_WORKSPACE\vcpkg\scripts\buildsystems\vcpkg.cmake" `
+            -DCMAKE_TOOLCHAIN_FILE="${{ github.workspace }}/vcpkg/scripts/buildsystems/vcpkg.cmake" `
             -DCMAKE_BUILD_TYPE=Release
           cmake --build build --config Release
 
